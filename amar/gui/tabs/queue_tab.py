@@ -344,27 +344,43 @@ class QueueTab(ttk.Frame):
 
                 # Include music videos
                 if not self._cancelled:
-                    video_ids = await artist_ripper.get_music_video_ids(qi.item_id, sf)
-                    if video_ids:
-                        log(f"Found {len(video_ids)} music videos for {qi.name}", "INFO")
-                        video_ripper = MusicVideoRipper(client, config)
-                        for vid in video_ids:
-                            if self._cancelled:
-                                break
-                            self._app.schedule_on_gui(self._file_progress.reset)
-                            await video_ripper.rip(vid, sf, info_only, log, progress_callback=file_cb)
+                    try:
+                        video_ids = await artist_ripper.get_music_video_ids(qi.item_id, sf)
+                        if video_ids:
+                            log(f"Found {len(video_ids)} music videos for {qi.name}", "INFO")
+                            video_ripper = MusicVideoRipper(client, config)
+                            for vid in video_ids:
+                                if self._cancelled:
+                                    break
+                                self._app.schedule_on_gui(self._file_progress.reset)
+                                try:
+                                    await video_ripper.rip(vid, sf, info_only, log, progress_callback=file_cb)
+                                except Exception as e:
+                                    log(f"Error downloading music video {vid}: {e}", "ERROR")
+                    except TokenExpiredError:
+                        raise
+                    except Exception as e:
+                        log(f"Error fetching music videos: {e}", "ERROR")
 
                 # Include albums
                 if not self._cancelled:
-                    album_ids = await artist_ripper.get_album_ids(qi.item_id, sf)
-                    if album_ids:
-                        log(f"Found {len(album_ids)} albums for {qi.name}", "INFO")
-                        album_ripper = AlbumRipper(client, config)
-                        for aid in album_ids:
-                            if self._cancelled:
-                                break
-                            self._app.schedule_on_gui(self._file_progress.reset)
-                            await album_ripper.rip(aid, sf, info_only, log, progress_callback=file_cb)
+                    try:
+                        album_ids = await artist_ripper.get_album_ids(qi.item_id, sf)
+                        if album_ids:
+                            log(f"Found {len(album_ids)} albums for {qi.name}", "INFO")
+                            album_ripper = AlbumRipper(client, config)
+                            for aid in album_ids:
+                                if self._cancelled:
+                                    break
+                                self._app.schedule_on_gui(self._file_progress.reset)
+                                try:
+                                    await album_ripper.rip(aid, sf, info_only, log, progress_callback=file_cb)
+                                except Exception as e:
+                                    log(f"Error downloading album {aid}: {e}", "ERROR")
+                    except TokenExpiredError:
+                        raise
+                    except Exception as e:
+                        log(f"Error fetching albums: {e}", "ERROR")
 
             elif qi.item_type == "album":
                 album_ripper = AlbumRipper(client, config)

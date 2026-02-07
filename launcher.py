@@ -34,6 +34,19 @@ def _extract_token_with_splash(base_path):
     root.resizable(False, False)
     root.configure(bg="#1e1e1e")
 
+    # Set window icon
+    ico_candidates = [os.path.join(base_path, "Icon.ico")]
+    if getattr(sys, 'frozen', False):
+        meipass = getattr(sys, '_MEIPASS', base_path)
+        ico_candidates.insert(0, os.path.join(meipass, "Icon.ico"))
+    for ico_path in ico_candidates:
+        if os.path.isfile(ico_path):
+            try:
+                root.iconbitmap(ico_path)
+            except Exception:
+                pass
+            break
+
     # Center the window on screen
     root.update_idletasks()
     x = (root.winfo_screenwidth() // 2) - 210

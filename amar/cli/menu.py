@@ -101,16 +101,32 @@ async def _handle_url_download(client: AsyncAppleMusicClient, config: AMARConfig
                 await artist_ripper.rip(item_id, cc, info_only, _log_cli)
 
                 if rip_videos_q == "y":
-                    video_ids = await artist_ripper.get_music_video_ids(item_id, cc)
-                    _log_cli(f"Found {len(video_ids)} music videos", "INFO")
-                    for vid in video_ids:
-                        await video_ripper.rip(vid, cc, info_only, _log_cli)
+                    try:
+                        video_ids = await artist_ripper.get_music_video_ids(item_id, cc)
+                        _log_cli(f"Found {len(video_ids)} music videos", "INFO")
+                        for vid in video_ids:
+                            try:
+                                await video_ripper.rip(vid, cc, info_only, _log_cli)
+                            except Exception as e:
+                                _log_cli(f"Error downloading music video {vid}: {e}", "ERROR")
+                    except TokenExpiredError:
+                        raise
+                    except Exception as e:
+                        _log_cli(f"Error fetching music videos: {e}", "ERROR")
 
                 if rip_albums_q == "y":
-                    album_ids = await artist_ripper.get_album_ids(item_id, cc)
-                    _log_cli(f"Found {len(album_ids)} albums", "INFO")
-                    for aid in album_ids:
-                        await album_ripper.rip(aid, cc, info_only, _log_cli)
+                    try:
+                        album_ids = await artist_ripper.get_album_ids(item_id, cc)
+                        _log_cli(f"Found {len(album_ids)} albums", "INFO")
+                        for aid in album_ids:
+                            try:
+                                await album_ripper.rip(aid, cc, info_only, _log_cli)
+                            except Exception as e:
+                                _log_cli(f"Error downloading album {aid}: {e}", "ERROR")
+                    except TokenExpiredError:
+                        raise
+                    except Exception as e:
+                        _log_cli(f"Error fetching albums: {e}", "ERROR")
 
             elif content_type == "album":
                 await album_ripper.rip(item_id, cc, info_only, _log_cli)

@@ -1,6 +1,8 @@
 """Main AMAR GUI application with async-tkinter bridge and theming."""
 
 import asyncio
+import os
+import sys
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -39,6 +41,9 @@ class AMARApp:
         self.root.geometry("1050x750")
         self.root.minsize(850, 650)
 
+        # Set window icon
+        self._set_icon()
+
         # Configure ttk style
         self._style = ttk.Style(self.root)
         available = self._style.theme_names()
@@ -52,6 +57,26 @@ class AMARApp:
         self.queue_manager.on_change(self._on_queue_change)
 
         self._build_ui()
+
+    def _set_icon(self):
+        """Set the window icon from Icon.ico if available."""
+        try:
+            # When frozen, PyInstaller extracts data to _MEIPASS temp dir
+            if getattr(sys, 'frozen', False):
+                meipass = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+                candidates = [
+                    os.path.join(meipass, "Icon.ico"),
+                    os.path.join(os.path.dirname(sys.executable), "Icon.ico"),
+                ]
+            else:
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                candidates = [os.path.join(project_root, "Icon.ico")]
+            for ico_path in candidates:
+                if os.path.isfile(ico_path):
+                    self.root.iconbitmap(ico_path)
+                    break
+        except Exception:
+            pass  # Icon is cosmetic, don't crash
 
     def _run_async_loop(self):
         asyncio.set_event_loop(self._loop)

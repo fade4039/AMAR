@@ -225,39 +225,64 @@ class DownloadTab(ttk.Frame):
 
                 try:
                     if parsed.content_type == "artist":
+                        # Phase 1: Artist page assets
                         self._app.schedule_on_gui(
                             self._current_progress.set_label, "Downloading artist assets..."
                         )
                         self._app.schedule_on_gui(self._file_progress.reset)
                         await artist_ripper.rip(parsed.item_id, sf, info_only, log, progress_callback=file_cb)
 
+                        # Phase 2: Music videos
                         if self._include_videos.get() and not self._cancelled:
-                            video_ids = await artist_ripper.get_music_video_ids(parsed.item_id, sf)
-                            log(f"Found {len(video_ids)} music videos", "INFO")
-                            for vi, vid in enumerate(video_ids):
-                                if self._cancelled:
-                                    break
+                            try:
                                 self._app.schedule_on_gui(
-                                    self._current_progress.set_progress,
-                                    (vi / max(len(video_ids), 1)) * 100,
-                                    f"Music video {vi + 1}/{len(video_ids)}",
+                                    self._current_progress.set_label, "Fetching music video list..."
                                 )
-                                self._app.schedule_on_gui(self._file_progress.reset)
-                                await video_ripper.rip(vid, sf, info_only, log, progress_callback=file_cb)
+                                video_ids = await artist_ripper.get_music_video_ids(parsed.item_id, sf)
+                                log(f"Found {len(video_ids)} music videos", "INFO")
+                                for vi, vid in enumerate(video_ids):
+                                    if self._cancelled:
+                                        break
+                                    self._app.schedule_on_gui(
+                                        self._current_progress.set_progress,
+                                        (vi / max(len(video_ids), 1)) * 100,
+                                        f"Music video {vi + 1}/{len(video_ids)}",
+                                    )
+                                    self._app.schedule_on_gui(self._file_progress.reset)
+                                    try:
+                                        await video_ripper.rip(vid, sf, info_only, log, progress_callback=file_cb)
+                                    except Exception as e:
+                                        log(f"Error downloading music video {vid}: {e}", "ERROR")
+                            except TokenExpiredError:
+                                raise
+                            except Exception as e:
+                                log(f"Error fetching music videos: {e}", "ERROR")
 
+                        # Phase 3: Albums
                         if self._include_albums.get() and not self._cancelled:
-                            album_ids = await artist_ripper.get_album_ids(parsed.item_id, sf)
-                            log(f"Found {len(album_ids)} albums", "INFO")
-                            for ai, aid in enumerate(album_ids):
-                                if self._cancelled:
-                                    break
+                            try:
                                 self._app.schedule_on_gui(
-                                    self._current_progress.set_progress,
-                                    (ai / max(len(album_ids), 1)) * 100,
-                                    f"Album {ai + 1}/{len(album_ids)}",
+                                    self._current_progress.set_label, "Fetching album list..."
                                 )
-                                self._app.schedule_on_gui(self._file_progress.reset)
-                                await album_ripper.rip(aid, sf, info_only, log, progress_callback=file_cb)
+                                album_ids = await artist_ripper.get_album_ids(parsed.item_id, sf)
+                                log(f"Found {len(album_ids)} albums", "INFO")
+                                for ai, aid in enumerate(album_ids):
+                                    if self._cancelled:
+                                        break
+                                    self._app.schedule_on_gui(
+                                        self._current_progress.set_progress,
+                                        (ai / max(len(album_ids), 1)) * 100,
+                                        f"Album {ai + 1}/{len(album_ids)}",
+                                    )
+                                    self._app.schedule_on_gui(self._file_progress.reset)
+                                    try:
+                                        await album_ripper.rip(aid, sf, info_only, log, progress_callback=file_cb)
+                                    except Exception as e:
+                                        log(f"Error downloading album {aid}: {e}", "ERROR")
+                            except TokenExpiredError:
+                                raise
+                            except Exception as e:
+                                log(f"Error fetching albums: {e}", "ERROR")
 
                     elif parsed.content_type == "album":
                         self._app.schedule_on_gui(
