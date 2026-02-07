@@ -1,0 +1,10 @@
+{
+  "max_concurrency": 10,
+  "storefront": "us",
+  "save_path": "",
+  "theme": "dark",
+  "rate_limit": 18.0,
+  "cache_ttl": 300,
+  "retry_max": 3,
+  "chunk_size": 65536
+}
