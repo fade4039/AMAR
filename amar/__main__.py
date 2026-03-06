@@ -94,10 +94,26 @@ def _extract_token_with_splash(base_path):
 def main():
     base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
+    # Handle --extract-token before loading/checking token
+    if "--extract-token" in sys.argv:
+        from .api.token import extract_token_with_selenium
+        try:
+            print("  Extracting token from Apple Music...")
+            token = extract_token_with_selenium(base_path)
+            if token:
+                print(f"  [OK] Token saved to {os.path.join(base_path, 'token.txt')}")
+            else:
+                print("  [X] Failed to extract token.")
+                sys.exit(1)
+        except RuntimeError as e:
+            print(f"  [X] {e}")
+            sys.exit(1)
+        return
+
     from .config import AMARConfig
     config = AMARConfig.load(base_path)
 
-    # If no token and running GUI mode, try auto-extraction with splash
+    # If no token, try auto-extraction (GUI) or show error (CLI)
     if not config.token:
         is_gui = "--gui" in sys.argv
 
@@ -135,19 +151,6 @@ def main():
         from .gui.app import AMARApp
         app = AMARApp(config)
         app.run()
-    elif "--extract-token" in sys.argv:
-        from .api.token import extract_token_with_selenium
-        try:
-            print("  Extracting token from Apple Music...")
-            token = extract_token_with_selenium(base_path)
-            if token:
-                print(f"  [OK] Token saved to {os.path.join(base_path, 'token.txt')}")
-            else:
-                print("  [X] Failed to extract token.")
-                sys.exit(1)
-        except RuntimeError as e:
-            print(f"  [X] {e}")
-            sys.exit(1)
     else:
         from .cli.menu import run_cli
         asyncio.run(run_cli(config))
