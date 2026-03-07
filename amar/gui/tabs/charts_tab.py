@@ -1,4 +1,4 @@
-"""Charts tab - browse Apple Music charts with queue integration."""
+"""Charts page - Apple HIG card layout."""
 
 import asyncio
 import tkinter as tk
@@ -10,52 +10,51 @@ from ..widgets.results_view import ResultsView
 
 
 class ChartsTab(ttk.Frame):
-    def __init__(self, parent: ttk.Notebook, app: "AMARApp"):  # noqa: F821
-        super().__init__(parent, padding=15)
+    def __init__(self, parent, app, **kwargs):
+        super().__init__(parent, padding=20, **kwargs)
         self._app = app
         self._task: Optional[asyncio.Future] = None
-
         self._build_ui()
 
     def _build_ui(self):
-        # Controls row
-        ctrl_frame = ttk.Frame(self)
-        ctrl_frame.pack(fill=tk.X, pady=(0, 10))
+        # Page title
+        ttk.Label(self, text="Charts", style="Title1.TLabel").pack(anchor=tk.W, pady=(0, 16))
 
-        ttk.Label(ctrl_frame, text="Chart Type:").pack(side=tk.LEFT, padx=(0, 5))
+        # --- Controls Card ---
+        ctrl_card = ttk.LabelFrame(self, text="Chart Options", padding=12)
+        ctrl_card.pack(fill=tk.X, pady=(0, 12))
+
+        ctrl_row = ttk.Frame(ctrl_card)
+        ctrl_row.pack(fill=tk.X)
+
+        ttk.Label(ctrl_row, text="Chart Type:").pack(side=tk.LEFT, padx=(0, 4))
         self._type_var = tk.StringVar(value="Both")
-        type_combo = ttk.Combobox(
-            ctrl_frame,
-            textvariable=self._type_var,
+        ttk.Combobox(
+            ctrl_row, textvariable=self._type_var,
             values=["Songs", "Albums", "Both", "Music Videos"],
-            state="readonly",
-            width=15,
-        )
-        type_combo.pack(side=tk.LEFT, padx=(0, 15))
+            state="readonly", width=15,
+        ).pack(side=tk.LEFT, padx=(0, 16))
 
-        ttk.Label(ctrl_frame, text="Limit:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(ctrl_row, text="Limit:").pack(side=tk.LEFT, padx=(0, 4))
         self._limit_var = tk.StringVar(value="20")
-        limit_combo = ttk.Combobox(
-            ctrl_frame,
-            textvariable=self._limit_var,
+        ttk.Combobox(
+            ctrl_row, textvariable=self._limit_var,
             values=["10", "20", "50"],
-            state="readonly",
-            width=5,
-        )
-        limit_combo.pack(side=tk.LEFT, padx=(0, 15))
+            state="readonly", width=5,
+        ).pack(side=tk.LEFT, padx=(0, 16))
 
-        self._refresh_btn = ttk.Button(ctrl_frame, text="Refresh", command=self._do_refresh)
+        self._refresh_btn = ttk.Button(ctrl_row, text="Refresh", command=self._do_refresh)
         self._refresh_btn.pack(side=tk.LEFT)
 
-        # Status
         self._status_var = tk.StringVar(value="Select chart type and click Refresh (Ctrl+Click to multi-select)")
-        ttk.Label(self, textvariable=self._status_var, style="Secondary.TLabel").pack(
-            anchor=tk.W, pady=(0, 5)
-        )
+        ttk.Label(ctrl_card, textvariable=self._status_var, style="CardSecondary.TLabel").pack(anchor=tk.W, pady=(8, 0))
 
-        # Results — extended selection for multi-select
+        # --- Results Card ---
+        results_card = ttk.LabelFrame(self, text="Chart Entries", padding=12)
+        results_card.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+
         self._results = ResultsView(
-            self,
+            results_card,
             columns=[
                 ("rank", "#", 40),
                 ("name", "Name", 300),
@@ -65,30 +64,16 @@ class ChartsTab(ttk.Frame):
             on_double_click=self._on_result_double_click,
             selectmode="extended",
         )
-        self._results.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        self._results.pack(fill=tk.BOTH, expand=True)
 
-        # Action buttons
+        # --- Action buttons ---
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X)
 
-        ttk.Button(
-            btn_frame, text="Add to Queue", command=self._add_to_queue,
-        ).pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            btn_frame, text="Copy URL", command=self._copy_url,
-            style="Secondary.TButton",
-        ).pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            btn_frame, text="Download Assets", command=self._download_selected,
-            style="Secondary.TButton",
-        ).pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            btn_frame, text="Select All", command=self._results.select_all,
-            style="Secondary.TButton",
-        ).pack(side=tk.RIGHT)
+        ttk.Button(btn_frame, text="Add to Queue", command=self._add_to_queue).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Copy URL", command=self._copy_url, style="Secondary.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Download Assets", command=self._download_selected, style="Secondary.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Select All", command=self._results.select_all, style="Secondary.TButton").pack(side=tk.RIGHT)
 
     def _do_refresh(self):
         type_map = {
@@ -126,13 +111,7 @@ class ChartsTab(ttk.Frame):
 
         results = data["results"]
         count = 0
-
-        # Map API chart types to queue item types
-        type_to_queue = {
-            "songs": "song",
-            "albums": "album",
-            "music-videos": "music-video",
-        }
+        type_to_queue = {"songs": "song", "albums": "album", "music-videos": "music-video"}
 
         for chart_type in ["songs", "albums", "music-videos"]:
             charts = results.get(chart_type, [])
@@ -163,7 +142,6 @@ class ChartsTab(ttk.Frame):
             self._app.switch_to_download_tab(url)
 
     def _add_to_queue(self):
-        """Add all selected items to the download queue."""
         selected = self._results.get_all_selected_data()
         if not selected:
             self._status_var.set("No items selected")
@@ -182,10 +160,8 @@ class ChartsTab(ttk.Frame):
             display_name = f"{name} - {artist}" if artist else name
 
             result = self._app.queue_manager.add(
-                name=display_name,
-                item_type=item_type,
-                item_id=data.get("id", ""),
-                url=data.get("url", ""),
+                name=display_name, item_type=item_type,
+                item_id=data.get("id", ""), url=data.get("url", ""),
             )
             if result:
                 added += 1

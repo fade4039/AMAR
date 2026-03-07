@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+.idea/
+artifacts/
+TestResults/
+*.user
+*.suo
+*.db
+*.db-shm
+*.db-wal
+dist/
+build/
+__pycache__/
+*.pyc

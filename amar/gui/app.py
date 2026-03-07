@@ -1,4 +1,4 @@
-"""Main AMAR GUI application with async-tkinter bridge and theming."""
+"""AMAR GUI - Apple HIG sidebar navigation layout."""
 
 import asyncio
 import os
@@ -11,17 +11,20 @@ from typing import Any, Callable, Coroutine, Optional
 from ..api.client import AsyncAppleMusicClient
 from ..config import AMARConfig
 from .queue_manager import QueueManager
-from .theme import THEMES, ThemeColors, apply_theme
-from .widgets.log_panel import LogPanel
+from .theme import THEMES, ThemeColors, apply_theme, FONT_FAMILY, FONT_LARGE_TITLE, FONT_CAPTION1
 
 
 class AMARApp:
-    """Main application window for AMAR with async support.
+    """Main application with Apple HIG sidebar navigation."""
 
-    Runs an asyncio event loop in a background thread. GUI updates are
-    pushed to the main thread via root.after(), and async work is
-    submitted via asyncio.run_coroutine_threadsafe().
-    """
+    NAV_ITEMS = [
+        ("download", "Download"),
+        ("queue", "Queue"),
+        ("search", "Search"),
+        ("charts", "Charts"),
+        ("storefront", "Storefront"),
+        ("settings", "Settings"),
+    ]
 
     def __init__(self, config: AMARConfig):
         self.config = config
@@ -29,45 +32,35 @@ class AMARApp:
         self.theme: ThemeColors = THEMES.get(config.theme, THEMES["dark"])
         self.queue_manager = QueueManager()
 
-        # Async event loop in background thread
         self._loop = asyncio.new_event_loop()
         self._async_thread = threading.Thread(
             target=self._run_async_loop, daemon=True, name="amar-async"
         )
 
-        # Build root window
         self.root = tk.Tk()
-        self.root.title("AMAR - Apple Music API Ripper V2")
-        self.root.geometry("1050x750")
-        self.root.minsize(850, 650)
-
-        # Set window icon
+        self.root.title("AMAR")
+        self.root.geometry("1100x720")
+        self.root.minsize(900, 600)
         self._set_icon()
 
-        # Configure ttk style
         self._style = ttk.Style(self.root)
-        available = self._style.theme_names()
-        if "clam" in available:
+        if "clam" in self._style.theme_names():
             self._style.theme_use("clam")
 
-        # Apply initial theme
         apply_theme(self.root, self._style, self.theme)
-
-        # Register queue observer for status bar updates
         self.queue_manager.on_change(self._on_queue_change)
 
+        self._current_page = None
+        self._pages = {}
+        self._nav_buttons = {}
+        self._sidebar_labels = []  # tk.Labels we need to re-theme
         self._build_ui()
 
     def _set_icon(self):
-        """Set the window icon from Icon.ico if available."""
         try:
-            # When frozen, PyInstaller extracts data to _MEIPASS temp dir
             if getattr(sys, 'frozen', False):
                 meipass = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-                candidates = [
-                    os.path.join(meipass, "Icon.ico"),
-                    os.path.join(os.path.dirname(sys.executable), "Icon.ico"),
-                ]
+                candidates = [os.path.join(meipass, "Icon.ico"), os.path.join(os.path.dirname(sys.executable), "Icon.ico")]
             else:
                 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                 candidates = [os.path.join(project_root, "Icon.ico")]
@@ -76,143 +69,162 @@ class AMARApp:
                     self.root.iconbitmap(ico_path)
                     break
         except Exception:
-            pass  # Icon is cosmetic, don't crash
+            pass
 
     def _run_async_loop(self):
         asyncio.set_event_loop(self._loop)
         self._loop.run_forever()
 
     def run_async(self, coro: Coroutine) -> asyncio.Future:
-        """Submit a coroutine to the background async event loop."""
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     def schedule_on_gui(self, callback: Callable, *args, **kwargs) -> None:
-        """Schedule a callback on the tkinter main thread.
-
-        Supports both positional and keyword arguments.
-        """
         try:
             if kwargs:
                 self.root.after(0, lambda: callback(*args, **kwargs))
             else:
                 self.root.after(0, callback, *args)
         except tk.TclError:
-            pass  # Window already destroyed
+            pass
 
     def log(self, message: str, level: str = "INFO") -> None:
-        """Thread-safe log method. Can be called from any thread."""
         self.schedule_on_gui(self._log_panel.log, message, level)
 
     def make_log_callback(self) -> Callable[[str, str], None]:
-        """Create a log callback safe for use from async code."""
         def _cb(message: str, level: str = "INFO"):
             self.log(message, level)
         return _cb
 
     def update_status(self, **kwargs) -> None:
-        """Update status bar fields. Accepts: status, storefront, token, queue."""
         for key, value in kwargs.items():
             var = self._status_vars.get(key)
             if var:
                 self.schedule_on_gui(var.set, value)
 
     def _on_queue_change(self) -> None:
-        """Called when the queue manager changes — update status bar."""
         self.update_status(queue=self.queue_manager.status_summary)
 
     def toggle_theme(self) -> None:
-        """Switch between dark and light themes."""
         new_name = "light" if self.config.theme == "dark" else "dark"
         self.config.theme = new_name
         self.config.save()
         self.theme = THEMES[new_name]
         apply_theme(self.root, self._style, self.theme)
 
-        # Update non-ttk widgets that need manual recoloring
         self._log_panel.apply_theme(self.theme)
+        self._retheme_sidebar()
 
-        # Update listboxes in storefront tab
-        sf_tab = self._tabs.get("storefront")
+        sf_tab = self._pages.get("storefront")
         if sf_tab:
             sf_tab.apply_theme(self.theme)
-
-        # Update queue tab tree tag colors
-        queue_tab = self._tabs.get("queue")
+        queue_tab = self._pages.get("queue")
         if queue_tab:
             queue_tab.apply_theme(self.theme)
-
-        # Update settings tab theme button text
-        settings_tab = self._tabs.get("settings")
+        settings_tab = self._pages.get("settings")
         if settings_tab:
             settings_tab.update_theme_button(new_name)
 
         self.log(f"Switched to {new_name} mode", "SUCCESS")
 
+    def _retheme_sidebar(self):
+        """Re-apply colors to non-ttk sidebar widgets after theme toggle."""
+        t = self.theme
+        self._sidebar_canvas.configure(bg=t.sidebar_bg)
+        for lbl, color_key in self._sidebar_labels:
+            color = getattr(t, color_key, t.fg_secondary)
+            lbl.configure(bg=t.sidebar_bg, fg=color)
+        for key, btn in self._nav_buttons.items():
+            if key == self._current_page:
+                btn.configure(style="SidebarItemActive.TButton")
+            else:
+                btn.configure(style="SidebarItem.TButton")
+
     def _build_ui(self):
-        # Main frame with generous padding
-        main_frame = ttk.Frame(self.root)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main = ttk.Frame(self.root)
+        main.pack(fill=tk.BOTH, expand=True)
 
-        # Top bar
-        top_bar = ttk.Frame(main_frame)
-        top_bar.pack(fill=tk.X, pady=(0, 8))
+        # --- Sidebar ---
+        sidebar = ttk.Frame(main, style="Sidebar.TFrame", width=200)
+        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        sidebar.pack_propagate(False)
 
-        # Title label
-        ttk.Label(
-            top_bar,
-            text="AMAR",
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side=tk.LEFT)
+        # App title
+        title_frame = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        title_frame.pack(fill=tk.X, padx=16, pady=(20, 4))
 
-        ttk.Label(
-            top_bar,
-            text="  Apple Music API Ripper",
-            font=("Segoe UI", 10),
-            style="Secondary.TLabel",
-        ).pack(side=tk.LEFT, pady=(5, 0))
+        lbl_title = tk.Label(title_frame, text="AMAR", font=FONT_LARGE_TITLE, bg=self.theme.sidebar_bg, fg=self.theme.accent, anchor="w")
+        lbl_title.pack(fill=tk.X)
+        self._sidebar_labels.append((lbl_title, "accent"))
 
-        # Separator between top bar and notebook
-        ttk.Separator(main_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(0, 8))
+        lbl_sub = tk.Label(title_frame, text="Apple Music API Ripper", font=FONT_CAPTION1, bg=self.theme.sidebar_bg, fg=self.theme.fg_secondary, anchor="w")
+        lbl_sub.pack(fill=tk.X)
+        self._sidebar_labels.append((lbl_sub, "fg_secondary"))
 
-        # Notebook (tabs)
-        self._notebook = ttk.Notebook(main_frame)
-        self._notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        ttk.Separator(sidebar, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=(12, 8))
 
-        # Tabs will be added after client initialization
-        self._tabs = {}
+        lbl_section = tk.Label(sidebar, text="LIBRARY", font=(FONT_FAMILY, 8, "bold"), bg=self.theme.sidebar_bg, fg=self.theme.fg_tertiary, anchor="w")
+        lbl_section.pack(fill=tk.X, padx=18, pady=(4, 4))
+        self._sidebar_labels.append((lbl_section, "fg_tertiary"))
 
-        # Separator between notebook and log panel
-        ttk.Separator(main_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(0, 8))
+        # Nav buttons
+        self._sidebar_canvas = tk.Canvas(sidebar, bg=self.theme.sidebar_bg, highlightthickness=0)
+        self._sidebar_canvas.pack(fill=tk.BOTH, expand=True, padx=8)
 
-        # Log panel (docked at bottom)
-        self._log_panel = LogPanel(main_frame, theme=self.theme)
-        self._log_panel.pack(fill=tk.X, pady=(0, 8))
+        nav_inner = ttk.Frame(self._sidebar_canvas, style="Sidebar.TFrame")
+        self._sidebar_canvas.create_window((0, 0), window=nav_inner, anchor="nw", width=184)
 
-        # Status bar
-        self._build_status_bar(main_frame)
+        for key, label in self.NAV_ITEMS:
+            btn = ttk.Button(nav_inner, text=f"  {label}", style="SidebarItem.TButton", command=lambda k=key: self._navigate(k))
+            btn.pack(fill=tk.X, pady=1)
+            self._nav_buttons[key] = btn
 
-    def _build_status_bar(self, parent):
-        status_frame = ttk.Frame(parent)
-        status_frame.pack(fill=tk.X)
+        # Status at bottom of sidebar
+        status_bottom = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        status_bottom.pack(fill=tk.X, side=tk.BOTTOM, padx=16, pady=(0, 16))
 
         self._status_vars = {
             "status": tk.StringVar(value="Ready"),
-            "storefront": tk.StringVar(value=f"Storefront: {self.config.storefront.upper()}"),
+            "storefront": tk.StringVar(value=self.config.storefront.upper()),
             "token": tk.StringVar(value="Token: " + ("Valid" if self.config.token else "Missing")),
             "queue": tk.StringVar(value="Queue: 0"),
         }
 
-        for i, (key, var) in enumerate(self._status_vars.items()):
-            if i > 0:
-                ttk.Separator(status_frame, orient=tk.VERTICAL).pack(
-                    side=tk.LEFT, fill=tk.Y, padx=5, pady=2
-                )
-            ttk.Label(status_frame, textvariable=var, font=("Segoe UI", 9)).pack(
-                side=tk.LEFT, padx=5
-            )
+        for var_key, color_key in [("queue", "fg_secondary"), ("storefront", "fg_tertiary"), ("token", "fg_tertiary")]:
+            lbl = tk.Label(status_bottom, textvariable=self._status_vars[var_key], font=FONT_CAPTION1, bg=self.theme.sidebar_bg, fg=getattr(self.theme, color_key), anchor="w")
+            lbl.pack(fill=tk.X)
+            self._sidebar_labels.append((lbl, color_key))
 
-    def _init_tabs(self):
-        """Initialize all tabs after the client is ready."""
+        # --- Right content area ---
+        right = ttk.Frame(main)
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self._content_frame = ttk.Frame(right)
+        self._content_frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Separator(right, orient=tk.HORIZONTAL).pack(fill=tk.X)
+
+        from .widgets.log_panel import LogPanel
+        self._log_panel = LogPanel(right, theme=self.theme)
+        self._log_panel.pack(fill=tk.X)
+
+    def _navigate(self, page_key: str):
+        if page_key == self._current_page:
+            return
+
+        if self._current_page and self._current_page in self._nav_buttons:
+            self._nav_buttons[self._current_page].configure(style="SidebarItem.TButton")
+        self._nav_buttons[page_key].configure(style="SidebarItemActive.TButton")
+
+        if self._current_page and self._current_page in self._pages:
+            self._pages[self._current_page].pack_forget()
+
+        if page_key not in self._pages:
+            self._pages[page_key] = self._create_page(page_key)
+
+        self._pages[page_key].pack(in_=self._content_frame, fill=tk.BOTH, expand=True)
+        self._current_page = page_key
+
+    def _create_page(self, key: str):
         from .tabs.download_tab import DownloadTab
         from .tabs.queue_tab import QueueTab
         from .tabs.search_tab import SearchTab
@@ -220,79 +232,55 @@ class AMARApp:
         from .tabs.storefront_tab import StorefrontTab
         from .tabs.settings_tab import SettingsTab
 
-        self._tabs["download"] = DownloadTab(self._notebook, self)
-        self._notebook.add(self._tabs["download"], text="  Download  ")
+        creators = {
+            "download": lambda: DownloadTab(self._content_frame, self),
+            "queue": lambda: QueueTab(self._content_frame, self),
+            "search": lambda: SearchTab(self._content_frame, self),
+            "charts": lambda: ChartsTab(self._content_frame, self),
+            "storefront": lambda: StorefrontTab(self._content_frame, self),
+            "settings": lambda: SettingsTab(self._content_frame, self),
+        }
+        return creators[key]()
 
-        self._tabs["queue"] = QueueTab(self._notebook, self)
-        self._notebook.add(self._tabs["queue"], text="  Queue  ")
-
-        self._tabs["search"] = SearchTab(self._notebook, self)
-        self._notebook.add(self._tabs["search"], text="  Search  ")
-
-        self._tabs["charts"] = ChartsTab(self._notebook, self)
-        self._notebook.add(self._tabs["charts"], text="  Charts  ")
-
-        self._tabs["storefront"] = StorefrontTab(self._notebook, self)
-        self._notebook.add(self._tabs["storefront"], text="  Storefront  ")
-
-        self._tabs["settings"] = SettingsTab(self._notebook, self)
-        self._notebook.add(self._tabs["settings"], text="  Settings  ")
+    def _init_tabs(self):
+        self._navigate("download")
 
     async def _init_client(self):
-        """Initialize the async API client."""
         self.client = AsyncAppleMusicClient(self.config)
         self.client.set_log_callback(self.make_log_callback())
         await self.client._ensure_session()
 
     async def _cleanup(self):
-        """Clean up the async client."""
         if self.client:
             await self.client.close()
 
     def _on_close(self):
-        """Handle window close - clean up async resources."""
         try:
             future = asyncio.run_coroutine_threadsafe(self._cleanup(), self._loop)
             future.result(timeout=5)
         except Exception:
             pass
-
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._async_thread.join(timeout=3)
         self.root.destroy()
 
     def run(self):
-        """Start the application."""
-        # Start async thread
         self._async_thread.start()
-
-        # Initialize client asynchronously
         future = asyncio.run_coroutine_threadsafe(self._init_client(), self._loop)
         try:
             future.result(timeout=10)
             self.log("API client initialized", "SUCCESS")
         except Exception as e:
             self.log(f"Failed to initialize API client: {e}", "ERROR")
-
-        # Build tabs
         self._init_tabs()
-
-        # Set close handler
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-
-        # Run tkinter main loop
         self.root.mainloop()
 
     def switch_to_download_tab(self, url: str = "") -> None:
-        """Switch to the download tab, optionally pre-filling the URL."""
-        download_tab = self._tabs.get("download")
-        if download_tab:
-            self._notebook.select(download_tab)
-            if url:
-                download_tab.set_url(url)
+        self._navigate("download")
+        download_tab = self._pages.get("download")
+        if download_tab and url:
+            download_tab.set_url(url)
 
     def switch_to_queue_tab(self) -> None:
-        """Switch to the queue tab."""
-        queue_tab = self._tabs.get("queue")
-        if queue_tab:
-            self._notebook.select(queue_tab)
+        self._navigate("queue")

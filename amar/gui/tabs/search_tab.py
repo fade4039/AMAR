@@ -1,4 +1,4 @@
-"""Search tab - catalog search with results display and queue integration."""
+"""Search page - Apple HIG card layout."""
 
 import asyncio
 import tkinter as tk
@@ -10,48 +10,48 @@ from ..widgets.results_view import ResultsView
 
 
 class SearchTab(ttk.Frame):
-    def __init__(self, parent: ttk.Notebook, app: "AMARApp"):  # noqa: F821
-        super().__init__(parent, padding=15)
+    def __init__(self, parent, app, **kwargs):
+        super().__init__(parent, padding=20, **kwargs)
         self._app = app
         self._search_task: Optional[asyncio.Future] = None
-
         self._build_ui()
 
     def _build_ui(self):
-        # Search input row
-        input_frame = ttk.Frame(self)
-        input_frame.pack(fill=tk.X, pady=(0, 10))
+        # Page title
+        ttk.Label(self, text="Search", style="Title1.TLabel").pack(anchor=tk.W, pady=(0, 16))
 
-        ttk.Label(input_frame, text="Query:").pack(side=tk.LEFT, padx=(0, 5))
+        # --- Search Card ---
+        search_card = ttk.LabelFrame(self, text="Catalog Search", padding=12)
+        search_card.pack(fill=tk.X, pady=(0, 12))
+
+        input_row = ttk.Frame(search_card)
+        input_row.pack(fill=tk.X)
 
         self._query_var = tk.StringVar()
-        self._query_entry = ttk.Entry(input_frame, textvariable=self._query_var, font=("Consolas", 10))
-        self._query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self._query_entry = ttk.Entry(input_row, textvariable=self._query_var, font=("Consolas", 10))
+        self._query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
         self._query_entry.bind("<Return>", lambda e: self._do_search())
 
-        ttk.Label(input_frame, text="Type:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(input_row, text="Type:").pack(side=tk.LEFT, padx=(0, 4))
         self._type_var = tk.StringVar(value="All")
-        type_combo = ttk.Combobox(
-            input_frame,
-            textvariable=self._type_var,
+        ttk.Combobox(
+            input_row, textvariable=self._type_var,
             values=["All", "Songs", "Albums", "Artists", "Music Videos"],
-            state="readonly",
-            width=15,
-        )
-        type_combo.pack(side=tk.LEFT, padx=(0, 10))
+            state="readonly", width=15,
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
-        self._search_btn = ttk.Button(input_frame, text="Search", command=self._do_search)
+        self._search_btn = ttk.Button(input_row, text="Search", command=self._do_search)
         self._search_btn.pack(side=tk.LEFT)
 
-        # Status label
         self._status_var = tk.StringVar(value="Enter a search query (Ctrl+Click to select multiple)")
-        ttk.Label(self, textvariable=self._status_var, style="Secondary.TLabel").pack(
-            anchor=tk.W, pady=(0, 5)
-        )
+        ttk.Label(search_card, textvariable=self._status_var, style="CardSecondary.TLabel").pack(anchor=tk.W, pady=(8, 0))
 
-        # Results treeview — extended selection for multi-select
+        # --- Results Card ---
+        results_card = ttk.LabelFrame(self, text="Results", padding=12)
+        results_card.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+
         self._results = ResultsView(
-            self,
+            results_card,
             columns=[
                 ("num", "#", 40),
                 ("type", "Type", 80),
@@ -63,30 +63,16 @@ class SearchTab(ttk.Frame):
             on_double_click=self._on_result_double_click,
             selectmode="extended",
         )
-        self._results.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        self._results.pack(fill=tk.BOTH, expand=True)
 
-        # Action buttons
+        # --- Action buttons ---
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X)
 
-        ttk.Button(
-            btn_frame, text="Add to Queue", command=self._add_to_queue,
-        ).pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            btn_frame, text="Copy URL", command=self._copy_url,
-            style="Secondary.TButton",
-        ).pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            btn_frame, text="Download Assets", command=self._download_selected,
-            style="Secondary.TButton",
-        ).pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            btn_frame, text="Select All", command=self._results.select_all,
-            style="Secondary.TButton",
-        ).pack(side=tk.RIGHT)
+        ttk.Button(btn_frame, text="Add to Queue", command=self._add_to_queue).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Copy URL", command=self._copy_url, style="Secondary.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Download Assets", command=self._download_selected, style="Secondary.TButton").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Select All", command=self._results.select_all, style="Secondary.TButton").pack(side=tk.RIGHT)
 
     def _do_search(self):
         query = self._query_var.get().strip()
@@ -130,7 +116,6 @@ class SearchTab(ttk.Frame):
         res = results["results"]
         count = 0
 
-        # Artists
         for item in res.get("artists", {}).get("data", [])[:10]:
             count += 1
             attrs = item.get("attributes", {})
@@ -138,16 +123,9 @@ class SearchTab(ttk.Frame):
             genres = ", ".join(attrs.get("genreNames", []))
             self._results.add_row(
                 (count, "Artist", name, "", genres, ""),
-                data={
-                    "url": attrs.get("url", ""),
-                    "type": "artist",
-                    "id": item.get("id", ""),
-                    "name": name,
-                    "artist": name,
-                },
+                data={"url": attrs.get("url", ""), "type": "artist", "id": item.get("id", ""), "name": name, "artist": name},
             )
 
-        # Albums
         for item in res.get("albums", {}).get("data", [])[:10]:
             count += 1
             attrs = item.get("attributes", {})
@@ -156,16 +134,9 @@ class SearchTab(ttk.Frame):
             year = attrs.get("releaseDate", "")[:4]
             self._results.add_row(
                 (count, "Album", name, artist, "", year),
-                data={
-                    "url": attrs.get("url", ""),
-                    "type": "album",
-                    "id": item.get("id", ""),
-                    "name": name,
-                    "artist": artist,
-                },
+                data={"url": attrs.get("url", ""), "type": "album", "id": item.get("id", ""), "name": name, "artist": artist},
             )
 
-        # Songs
         for item in res.get("songs", {}).get("data", [])[:10]:
             count += 1
             attrs = item.get("attributes", {})
@@ -175,24 +146,10 @@ class SearchTab(ttk.Frame):
             duration_ms = attrs.get("durationInMillis")
             duration = convert_ms(duration_ms) if duration_ms else ""
             self._results.add_row(
-                (
-                    count,
-                    "Song",
-                    name,
-                    artist,
-                    f"{attrs.get('albumName', '')} ({duration})",
-                    "",
-                ),
-                data={
-                    "url": attrs.get("url", ""),
-                    "type": "song",
-                    "id": item.get("id", ""),
-                    "name": name,
-                    "artist": artist,
-                },
+                (count, "Song", name, artist, f"{attrs.get('albumName', '')} ({duration})", ""),
+                data={"url": attrs.get("url", ""), "type": "song", "id": item.get("id", ""), "name": name, "artist": artist},
             )
 
-        # Music Videos
         for item in res.get("music-videos", {}).get("data", [])[:10]:
             count += 1
             attrs = item.get("attributes", {})
@@ -200,13 +157,7 @@ class SearchTab(ttk.Frame):
             artist = attrs.get("artistName", "")
             self._results.add_row(
                 (count, "Video", name, artist, "", ""),
-                data={
-                    "url": attrs.get("url", ""),
-                    "type": "music-video",
-                    "id": item.get("id", ""),
-                    "name": name,
-                    "artist": artist,
-                },
+                data={"url": attrs.get("url", ""), "type": "music-video", "id": item.get("id", ""), "name": name, "artist": artist},
             )
 
         self._status_var.set(f"Found {count} results (Ctrl+Click to multi-select)")
@@ -217,7 +168,6 @@ class SearchTab(ttk.Frame):
             self._app.switch_to_download_tab(url)
 
     def _add_to_queue(self):
-        """Add all selected items to the download queue."""
         selected = self._results.get_all_selected_data()
         if not selected:
             self._status_var.set("No items selected")
@@ -236,10 +186,8 @@ class SearchTab(ttk.Frame):
             display_name = f"{name} - {artist}" if artist and artist != name else name
 
             result = self._app.queue_manager.add(
-                name=display_name,
-                item_type=item_type,
-                item_id=data.get("id", ""),
-                url=data.get("url", ""),
+                name=display_name, item_type=item_type,
+                item_id=data.get("id", ""), url=data.get("url", ""),
             )
             if result:
                 added += 1

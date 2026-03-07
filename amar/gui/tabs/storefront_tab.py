@@ -1,4 +1,4 @@
-"""Storefront tab - browse and select storefronts."""
+"""Storefront page - Apple HIG card layout."""
 
 import asyncio
 import tkinter as tk
@@ -9,47 +9,44 @@ from ...config import COUNTRY_CODES
 
 
 class StorefrontTab(ttk.Frame):
-    def __init__(self, parent: ttk.Notebook, app: "AMARApp"):  # noqa: F821
-        super().__init__(parent, padding=15)
+    def __init__(self, parent, app, **kwargs):
+        super().__init__(parent, padding=20, **kwargs)
         self._app = app
         self._task: Optional[asyncio.Future] = None
-
         self._build_ui()
         self._apply_listbox_theme(app.theme)
 
     def _build_ui(self):
-        # Current storefront
-        current_frame = ttk.LabelFrame(self, text="Current Storefront", padding=10)
-        current_frame.pack(fill=tk.X, pady=(0, 10))
+        # Page title
+        ttk.Label(self, text="Storefront", style="Title1.TLabel").pack(anchor=tk.W, pady=(0, 16))
+
+        # --- Current Storefront Card ---
+        current_card = ttk.LabelFrame(self, text="Current Storefront", padding=12)
+        current_card.pack(fill=tk.X, pady=(0, 12))
 
         self._current_var = tk.StringVar(
             value=f"{self._app.config.storefront.upper()} - {COUNTRY_CODES.get(self._app.config.storefront, 'Unknown')}"
         )
-        ttk.Label(current_frame, textvariable=self._current_var, font=("Segoe UI", 12, "bold")).pack(
-            anchor=tk.W
-        )
+        ttk.Label(current_card, textvariable=self._current_var, font=("Segoe UI", 12, "bold")).pack(anchor=tk.W)
 
-        # Selector
-        select_frame = ttk.LabelFrame(self, text="Select Storefront", padding=10)
-        select_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        # --- Select Storefront Card ---
+        select_card = ttk.LabelFrame(self, text="Select Storefront", padding=12)
+        select_card.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
 
-        # Filter
-        filter_row = ttk.Frame(select_frame)
-        filter_row.pack(fill=tk.X, pady=(0, 5))
+        filter_row = ttk.Frame(select_card)
+        filter_row.pack(fill=tk.X, pady=(0, 8))
 
-        ttk.Label(filter_row, text="Filter:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(filter_row, text="Filter:").pack(side=tk.LEFT, padx=(0, 8))
         self._filter_var = tk.StringVar()
         self._filter_var.trace_add("write", self._on_filter_change)
         ttk.Entry(filter_row, textvariable=self._filter_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Listbox
-        list_frame = ttk.Frame(select_frame)
+        list_frame = ttk.Frame(select_card)
         list_frame.pack(fill=tk.BOTH, expand=True)
 
         self._listbox = tk.Listbox(list_frame, font=("Consolas", 10), selectmode=tk.SINGLE)
         scrollbar = ttk.Scrollbar(list_frame, command=self._listbox.yview)
         self._listbox.configure(yscrollcommand=scrollbar.set)
-
         self._listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -59,21 +56,19 @@ class StorefrontTab(ttk.Frame):
             self._all_entries.append((code, entry))
             self._listbox.insert(tk.END, entry)
 
-        # Apply button
+        # --- Action buttons ---
         btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, pady=(0, 10))
+        btn_frame.pack(fill=tk.X, pady=(0, 12))
 
-        ttk.Button(btn_frame, text="Apply", command=self._apply).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(btn_frame, text="View Details", command=self._view_details).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="Apply", command=self._apply).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="View Details", command=self._view_details, style="Secondary.TButton").pack(side=tk.LEFT)
 
-        # Details panel
-        self._details_frame = ttk.LabelFrame(self, text="Storefront Details", padding=10)
-        self._details_frame.pack(fill=tk.X)
+        # --- Details Card ---
+        details_card = ttk.LabelFrame(self, text="Storefront Details", padding=12)
+        details_card.pack(fill=tk.X)
 
         self._details_var = tk.StringVar(value="Select a storefront and click 'View Details'")
-        ttk.Label(self._details_frame, textvariable=self._details_var, wraplength=600).pack(
-            anchor=tk.W
-        )
+        ttk.Label(details_card, textvariable=self._details_var, wraplength=600).pack(anchor=tk.W)
 
     def _on_filter_change(self, *_):
         query = self._filter_var.get().strip().lower()
@@ -126,16 +121,11 @@ class StorefrontTab(ttk.Frame):
         self._app.schedule_on_gui(self._details_var.set, text)
 
     def _apply_listbox_theme(self, theme) -> None:
-        """Apply theme colors to the tk.Listbox (non-ttk widget)."""
         self._listbox.configure(
-            bg=theme.tree_bg,
-            fg=theme.tree_fg,
-            selectbackground=theme.tree_select_bg,
-            selectforeground=theme.tree_select_fg,
-            highlightbackground=theme.border,
-            highlightcolor=theme.border_focus,
+            bg=theme.tree_bg, fg=theme.tree_fg,
+            selectbackground=theme.tree_select_bg, selectforeground=theme.tree_select_fg,
+            highlightbackground=theme.border, highlightcolor=theme.border_focus,
         )
 
     def apply_theme(self, theme) -> None:
-        """Apply a new theme (called on theme toggle)."""
         self._apply_listbox_theme(theme)

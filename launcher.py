@@ -21,7 +21,7 @@ def _get_base_path():
 
 
 def _extract_token_with_splash(base_path):
-    """Show a splash window while extracting the token via Selenium.
+    """Show an Apple HIG styled splash window while extracting the token.
 
     Returns True if a token was successfully extracted, False otherwise.
     """
@@ -29,10 +29,10 @@ def _extract_token_with_splash(base_path):
     from tkinter import ttk
 
     root = tk.Tk()
-    root.title("AMAR - Initializing")
-    root.geometry("420x180")
+    root.title("AMAR")
+    root.geometry("460x200")
     root.resizable(False, False)
-    root.configure(bg="#1e1e1e")
+    root.configure(bg="#1C1C1E")
 
     # Set window icon
     ico_candidates = [os.path.join(base_path, "Icon.ico")]
@@ -47,44 +47,43 @@ def _extract_token_with_splash(base_path):
                 pass
             break
 
-    # Center the window on screen
+    # Center on screen
     root.update_idletasks()
-    x = (root.winfo_screenwidth() // 2) - 210
-    y = (root.winfo_screenheight() // 2) - 90
-    root.geometry(f"420x180+{x}+{y}")
+    x = (root.winfo_screenwidth() // 2) - 230
+    y = (root.winfo_screenheight() // 2) - 100
+    root.geometry(f"460x200+{x}+{y}")
 
-    # Use clam theme for styling
+    # Apple HIG dark theme
     style = ttk.Style(root)
     if "clam" in style.theme_names():
         style.theme_use("clam")
-    style.configure("TFrame", background="#1e1e1e")
-    style.configure("TLabel", background="#1e1e1e", foreground="#d4d4d4")
+    style.configure("TFrame", background="#1C1C1E")
+    style.configure("TLabel", background="#1C1C1E", foreground="#FFFFFF", font=("Segoe UI", 10))
     style.configure(
         "Horizontal.TProgressbar",
-        background="#e8555d", troughcolor="#2d2d2d", bordercolor="#3c3c3c",
+        background="#FC3C44", troughcolor="#3A3A3C", bordercolor="#2C2C2E",
     )
 
-    frame = ttk.Frame(root, padding=20)
+    frame = ttk.Frame(root, padding=24)
     frame.pack(fill=tk.BOTH, expand=True)
 
+    # Title in Apple Music red
     ttk.Label(
-        frame, text="AMAR", font=("Segoe UI", 18, "bold"),
-    ).pack(pady=(0, 5))
+        frame, text="AMAR", font=("Segoe UI", 22, "bold"),
+        foreground="#FC3C44",
+    ).pack(pady=(0, 4))
 
     status_var = tk.StringVar(value="No token found. Extracting automatically...")
-    status_label = ttk.Label(
-        frame, textvariable=status_var, font=("Segoe UI", 10),
-    )
-    status_label.pack(pady=(0, 10))
+    ttk.Label(frame, textvariable=status_var).pack(pady=(0, 12))
 
-    progress = ttk.Progressbar(frame, mode="indeterminate", length=360)
-    progress.pack(pady=(0, 10))
+    progress = ttk.Progressbar(frame, mode="indeterminate", length=400)
+    progress.pack(pady=(0, 12))
     progress.start(15)
 
     detail_var = tk.StringVar(value="Starting headless browser...")
     ttk.Label(
         frame, textvariable=detail_var, font=("Segoe UI", 8),
-        foreground="#858585",
+        foreground="#98989D",
     ).pack()
 
     result = {"success": False, "error": None}
@@ -107,7 +106,6 @@ def _extract_token_with_splash(base_path):
             status_var.set("Token extraction failed.")
             detail_var.set(str(e)[:80])
 
-        # Close the splash after a short delay so user can read the status
         root.after(1500 if result["success"] else 4000, root.destroy)
 
     thread = threading.Thread(target=_run_extraction, daemon=True)
@@ -129,7 +127,6 @@ def main():
     if not config.token:
         success = _extract_token_with_splash(base_path)
         if not success:
-            # Show a simple error dialog and exit
             try:
                 import tkinter as tk
                 from tkinter import messagebox
